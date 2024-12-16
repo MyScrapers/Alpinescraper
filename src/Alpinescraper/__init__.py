@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name
 """Alpinescraper main package.
 
 Add your package documentation here.
