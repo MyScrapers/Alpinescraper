@@ -157,5 +157,4 @@ mlruns/
 out.csv
 
 *.tmp
-*.json
 dependency-check-report.*
