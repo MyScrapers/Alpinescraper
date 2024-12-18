@@ -13,7 +13,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the alpine scraper")
     parser.add_argument("nb_spider", type=int, help="Number of spider to deploy")
     parser.add_argument(
-        "json_filename", type=str, help="Json filename to stores the result"
+        "json_filename",
+        type=str,
+        help="Json filename to stores the result",
+        nargs="?",
+        const=1,
+        default="result.json",
     )
     args = parser.parse_args()
 
