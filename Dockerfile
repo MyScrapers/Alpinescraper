@@ -1,5 +1,5 @@
 # Ensure consistent casing for `FROM` and `as` keywords
-FROM python:3.11 AS base
+FROM python:3.11-slim AS base
 
 ENV PYTHONFAULTHANDLER=1 \
   PYTHONUNBUFFERED=1 \
