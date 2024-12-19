@@ -2,9 +2,12 @@
 
 import json
 import logging
+import os
 import re
 from dataclasses import asdict, fields, replace
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
+
+from pymongo import MongoClient
 
 from Alpinescraper.common.items import LuxuryestateItem
 
@@ -14,11 +17,17 @@ LOGGER = logging.getLogger(__name__)
 class ItemPipeline:
     """Process the data scrapped."""
 
-    def __init__(self, raw_item: List[LuxuryestateItem], json_filename: str) -> None:
+    def __init__(
+        self,
+        raw_item: List[LuxuryestateItem],
+        json_filename: str = "RESULT.JSON",
+        mongo_database: str = "ALPINESCRAPER",
+    ) -> None:
         """Pipeline constructor."""
         self.raw_item: List[LuxuryestateItem] = raw_item
         self.json_filename: str = json_filename
         self.clean_item: List[LuxuryestateItem] = self.clean_raw_data()
+        self.mongo_database: str = mongo_database
 
     def serialize_int(self, string: str) -> Optional[int]:
         """Serialize string values to integer."""
@@ -108,3 +117,30 @@ class ItemPipeline:
                 ensure_ascii=False,
                 indent=4,
             )
+
+    def write_mongodb(self, collection: str) -> None:
+        """Writes the data scraped in the json defined in attributes."""
+        LOGGER.info("Writing data in : %s", self.mongo_database)
+
+        pwd = os.environ["MONGODB_PWD"]
+        user = os.environ["MONGODB_USER"]
+
+        connection_string = f"mongodb+srv://{user}:{pwd}@cluster0.g0glf.mongodb.net/"
+        try:
+            client: MongoClient[Dict[str, Any]] = MongoClient(connection_string)
+        except Exception as exception:  # pylint: disable=broad-exception-caught
+            LOGGER.error("Couldn't connect to MongoDB: %s", exception)
+        database_conection = client[self.mongo_database]
+        tmp_collection = database_conection[collection]
+
+        # Clean the collection
+        tmp_collection.delete_many({})
+
+        # Insert the new data
+        try:
+            tmp_collection.insert_many([asdict(item) for item in self.clean_item])
+            LOGGER.info(
+                "Data successfully written to MongoDB collection: %s", collection
+            )
+        except Exception as exception:  # pylint: disable=broad-exception-caught
+            LOGGER.error("Error writing data to MongoDB: %s", exception)

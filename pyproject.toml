@@ -13,6 +13,7 @@ python = "~3.11"
 numpy = "~1.26"                                     # NumPy is the fundamental package for array computing with Python.
 bs4 = "^0.0.2"
 requests = "^2.32.3"
+pymongo = "^4.10.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "~24"                                       # The uncompromising code formatter.

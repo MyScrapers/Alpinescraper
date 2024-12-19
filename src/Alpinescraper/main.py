@@ -33,7 +33,8 @@ def run_spider(nb_spider: int, json_filename: str = "result.json") -> None:
     luxuryestate_scraper = luxuryestate.Luxuryestate(nb_spider=nb_spider)
     scraped_items = luxuryestate_scraper.deploy_spider()
     pipe = pipeline.ItemPipeline(raw_item=scraped_items, json_filename=json_filename)
-    pipe.write_json()
+    # pipe.write_json()
+    pipe.write_mongodb("LUXURYESTATE")
     LOGGER.info("Scraping over.")
 
 
