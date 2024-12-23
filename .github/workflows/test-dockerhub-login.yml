@@ -1,0 +1,16 @@
+name: Test DockerHub Login
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-dockerhub-login:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print DockerHub Username
+        run: echo "DockerHub Username: ${{ secrets.DOCKERHUB_USERNAME }}"
+
+      - name: Attempt DockerHub Login
+        run: |
+          echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
