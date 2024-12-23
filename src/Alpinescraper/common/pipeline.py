@@ -21,13 +21,11 @@ class ItemPipeline:
         self,
         raw_item: List[LuxuryestateItem],
         json_filename: str = "RESULT.JSON",
-        mongo_database: str = "ALPINESCRAPER",
     ) -> None:
         """Pipeline constructor."""
         self.raw_item: List[LuxuryestateItem] = raw_item
         self.json_filename: str = json_filename
         self.clean_item: List[LuxuryestateItem] = self.clean_raw_data()
-        self.mongo_database: str = mongo_database
 
     def serialize_int(self, string: str) -> Optional[int]:
         """Serialize string values to integer."""
@@ -120,17 +118,17 @@ class ItemPipeline:
 
     def write_mongodb(self, collection: str) -> None:
         """Writes the data scraped in the json defined in attributes."""
-        LOGGER.info("Writing data in : %s", self.mongo_database)
-
         pwd = os.environ["MONGODB_PWD"]
         user = os.environ["MONGODB_USER"]
+        mongo_database = os.environ["MONGODB_DATABASE"]
+        LOGGER.info("Writing data in : %s", mongo_database)
 
         connection_string = f"mongodb+srv://{user}:{pwd}@cluster0.g0glf.mongodb.net/"
         try:
             client: MongoClient[Dict[str, Any]] = MongoClient(connection_string)
         except Exception as exception:  # pylint: disable=broad-exception-caught
             LOGGER.error("Couldn't connect to MongoDB: %s", exception)
-        database_conection = client[self.mongo_database]
+        database_conection = client[mongo_database]
         tmp_collection = database_conection[collection]
 
         # Clean the collection

@@ -12,6 +12,7 @@ ENV PYTHONFAULTHANDLER=1 \
 USER 0
 
 RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y curl && \
     apt-get clean
 
 # install necessary system dependencies here using `apt-get install -y`
@@ -24,7 +25,7 @@ ENV VENV_PATH="poetry_venv" \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
     PATH="/root/.local/bin:$PATH"
 
-RUN curl -sSL https://install.python-poetry.org | python -
+RUN curl -sSL https://install.python-poetry.org | python3 -
 
 WORKDIR /app
 
@@ -47,4 +48,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 COPY --from=builder /app/.venv /app/.venv
 
 # Default command. Can be overridden using docker run <image> <command>
-CMD entrypoint
+CMD ["poetry", "run", "main", "25"]
