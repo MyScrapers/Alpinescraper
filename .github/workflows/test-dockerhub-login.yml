@@ -9,6 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - 
+        name: Print env variables
+        run: env
+      - 
         name: Username
         run: echo "Username '${{ secrets.DOCKERHUB_USERNAME }}'"
       -
