@@ -3,6 +3,7 @@ name: Run Docker Container on Schedule
 on:
   schedule:
     - cron: '0 0 * * *' # Runs every day at midnight
+  workflow_dispatch: # Allows manual triggering
 
 jobs:
   run-docker-container:
