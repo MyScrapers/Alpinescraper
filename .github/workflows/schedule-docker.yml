@@ -20,4 +20,12 @@ jobs:
         run: echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Run Docker container
-        run: docker run --rm julienhae/alpinescraper:latest
+        env:
+          MONGODB_PWD: ${{ secrets.MONGODB_PWD }}
+          MONGODB_USER: ${{ secrets.MONGODB_USER }}
+          MONGODB_DATABASE: ${{ secrets.MONGODB_DATABASE }}
+        run: docker run --rm \
+          -e MONGODB_PWD="${{ secrets.MONGODB_PWD }}" \
+          -e MONGODB_USER="${{ secrets.MONGODB_USER }}" \
+          -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
+          julienhae/alpinescraper:latest
