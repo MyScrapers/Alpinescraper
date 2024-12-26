@@ -17,21 +17,21 @@ jobs:
         uses: supercharge/mongodb-github-action@1.11.0
         with:
           mongodb-version: '6.0'
-          mongodb-username: supercharge
-          mongodb-password: secret
-          mongodb-db: supercharge
+          mongodb-username: ${{ secrets.MONGODB_USER }}
+          mongodb-password: ${{ secrets.MONGODB_PWD }}
+          mongodb-db: ${{ secrets.MONGODB_DATABASE }}
 
       - name: Log in to DockerHub
         run: echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Run Docker container
         env:
-          MONGODB_PWD: secret
-          MONGODB_USER: supercharge
-          MONGODB_DATABASE: supercharge
+          MONGODB_PWD: ${{ secrets.MONGODB_PWD }}
+          MONGODB_USER: ${{ secrets.MONGODB_USER }}
+          MONGODB_DATABASE: ${{ secrets.MONGODB_DATABASE }}
         run: |
           docker run --rm \
-            -e MONGODB_PWD="secret" \
-            -e MONGODB_USER="supercharge" \
-            -e MONGODB_DATABASE="supercharge" \
+            -e MONGODB_PWD="${{ secrets.MONGODB_PWD }}" \
+            -e MONGODB_USER="${{ secrets.MONGODB_USER }}" \
+            -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
             julienhae/alpinescraper:latest
