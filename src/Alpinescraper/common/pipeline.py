@@ -8,7 +8,7 @@ from dataclasses import asdict, fields, replace
 from typing import Any, Callable, Dict, List, Optional
 
 from pymongo import MongoClient
-
+import ssl
 from Alpinescraper.common.items import LuxuryestateItem
 
 LOGGER = logging.getLogger(__name__)
@@ -123,7 +123,8 @@ class ItemPipeline:
         mongo_database = os.environ["MONGODB_DATABASE"]
         LOGGER.info("Writing data in : %s", mongo_database)
 
-        connection_string = f"mongodb+srv://{user}:{pwd}@cluster0.g0glf.mongodb.net/"
+        connection_string = f"mongodb+srv://{user}:{pwd}@cluster0.g0glf.mongodb.net/{mongo_database}?retryWrites=true&w=majority"
+        client = MongoClient(connection_string, ssl=True, ssl_cert_reqs=ssl.CERT_NONE)
         try:
             client: MongoClient[Dict[str, Any]] = MongoClient(connection_string)
         except Exception as exception:  # pylint: disable=broad-exception-caught
