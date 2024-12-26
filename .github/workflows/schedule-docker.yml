@@ -24,8 +24,9 @@ jobs:
           MONGODB_PWD: ${{ secrets.MONGODB_PWD }}
           MONGODB_USER: ${{ secrets.MONGODB_USER }}
           MONGODB_DATABASE: ${{ secrets.MONGODB_DATABASE }}
-        run: docker run --rm \
-          -e MONGODB_PWD="${{ secrets.MONGODB_PWD }}" \
-          -e MONGODB_USER="${{ secrets.MONGODB_USER }}" \
-          -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
-          julienhae/alpinescraper:latest
+        run: |
+          docker run --rm \
+            -e MONGODB_PWD="${{ secrets.MONGODB_PWD }}" \
+            -e MONGODB_USER="${{ secrets.MONGODB_USER }}" \
+            -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
+            julienhae/alpinescraper:latest
