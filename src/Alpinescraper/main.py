@@ -3,7 +3,7 @@
 import argparse
 import logging
 
-from Alpinescraper.common import luxuryestate, pipeline
+from Alpinescraper.common import pipeline, scraper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,11 +30,11 @@ def main() -> None:
 def run_spider(nb_spider: int, json_filename: str = "result.json") -> None:
     """Run you scraper."""
     LOGGER.info("Scraping with %i spiders...", nb_spider)
-    luxuryestate_scraper = luxuryestate.Luxuryestate(nb_spider=nb_spider)
-    scraped_items = luxuryestate_scraper.deploy_spider()
+    orchestrator = scraper.AscensionImmoOrchestrator(nb_spider=nb_spider)
+    scraped_items = orchestrator.deploy_army()
     pipe = pipeline.ItemPipeline(raw_item=scraped_items, json_filename=json_filename)
-    # pipe.write_json()
-    pipe.write_mongodb("LUXURYESTATE")
+    pipe.write_json()
+    # pipe.write_mongodb("LUXURYESTATE")
     LOGGER.info("Scraping over.")
 
 

@@ -8,8 +8,8 @@ from dataclasses import asdict, fields, replace
 from typing import Any, Callable, Dict, List, Optional
 
 from pymongo import MongoClient
-import ssl
-from Alpinescraper.common.items import LuxuryestateItem
+
+from Alpinescraper.common.items import Item
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,24 +19,26 @@ class ItemPipeline:
 
     def __init__(
         self,
-        raw_item: List[LuxuryestateItem],
+        raw_item: List[Item],
         json_filename: str = "RESULT.JSON",
     ) -> None:
         """Pipeline constructor."""
-        self.raw_item: List[LuxuryestateItem] = raw_item
+        self.raw_item: List[Item] = raw_item
         self.json_filename: str = json_filename
-        self.clean_item: List[LuxuryestateItem] = self.clean_raw_data()
+        self.clean_item: List[Item] = self.clean_raw_data()
 
     def serialize_int(self, string: str) -> Optional[int]:
         """Serialize string values to integer."""
-        integer = int("".join(re.findall(r"[-+]?\d+", string.strip())))
+        tmp_string = "".join(re.findall(r"[-+]?\d+", string.strip()))
+        integer = int(tmp_string) if tmp_string or len(tmp_string) != 0 else None
         if not integer:
             return None
         return integer
 
     def serialize_float(self, string: str) -> Optional[float]:
         """Serialize string values to float."""
-        float_val = float("".join(re.findall(r"[-+]?(?:\d*\.*\d+)", string.strip())))
+        tmp_string = "".join(re.findall(r"[-+]?(?:\d*\.*\d+)", string.strip()))
+        float_val = float(tmp_string) if tmp_string or len(tmp_string) != 0 else None
         if not float_val:
             return None
         return float_val
@@ -54,8 +56,8 @@ class ItemPipeline:
         return value in true_values
 
     def serialize_string(self, input_string: str) -> Optional[str]:
-        """Strip leading and trailing whitespace characters including newlines."""
-        cleaned_string = input_string.strip()
+        """Remove all occurrences of whitespace characters including newlines and strip leading and trailing whitespace."""
+        cleaned_string = re.sub(r"\s+", " ", input_string).strip()
         if not cleaned_string:
             return None
         return cleaned_string
@@ -64,9 +66,9 @@ class ItemPipeline:
         """Apply the serializer to value based on the type define."""
         return serializer(value) if value is not None else None
 
-    def clean_raw_data(self) -> List[LuxuryestateItem]:
+    def clean_raw_data(self) -> List[Item]:
         """Clean the data based on the type defined in the item."""
-        clean_data: List[LuxuryestateItem] = []
+        clean_data: List[Item] = []
         for item in self.raw_item:
             tmp_item = replace(item)
             for field in fields(item):
@@ -124,7 +126,6 @@ class ItemPipeline:
         LOGGER.info("Writing data in : %s", mongo_database)
 
         connection_string = f"mongodb+srv://{user}:{pwd}@cluster0.g0glf.mongodb.net/{mongo_database}?retryWrites=true&w=majority"
-        client = MongoClient(connection_string, ssl=True, ssl_cert_reqs=ssl.CERT_NONE)
         try:
             client: MongoClient[Dict[str, Any]] = MongoClient(connection_string)
         except Exception as exception:  # pylint: disable=broad-exception-caught
