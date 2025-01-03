@@ -4,10 +4,11 @@
 import logging
 import re
 from datetime import date
-from typing import Dict, List, Optional
+from time import sleep
+from typing import Dict, List, Optional, Tuple
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, element
 
 from .items import Item
 
@@ -23,18 +24,106 @@ class Spider:
         self.urls: List[str] = urls
 
     def parse(self, url: str) -> Optional[Item]:
-        """Fetch the URL for the website."""
+        """Parse the data for an offer."""
         raise NotImplementedError
 
     def deploy(self) -> List[Item]:
-        """Fetch the URL for the website."""
-        raise NotImplementedError
+        """Deploy the spider."""
+        items = []
+        for url in self.urls:
+            item = self.parse(url)
+            sleep(1)
+            if item:
+                items.append(item)
+        return items
+
+    def clean_feature(self, feature: element.Tag) -> Optional[Tuple[str, str]]:
+        """Clean a feature when they come in couple."""
+        feature_data = feature.text.strip().split(":")
+        if len(feature_data) == 2:
+            feature_name = re.sub(r"^\s|\s$", "", feature_data[0])
+            feature_value = re.sub(r"^\s|\s$", "", feature_data[1])
+            return feature_name, feature_value
+        logging.warning("Feature not cleaned: %s", feature)
+        return None
+
+
+class AgenceOlivierSpider(Spider):
+    """Class to scrap the website https://www.agence-olivier.fr."""
+
+    def __init__(self, urls: List[str], name: str = "agence_olivier") -> None:
+        """Constructor for the AgenceOlivier spider."""
+        super().__init__(name, urls)
+        self.conversion_args: Dict[str, str] = {
+            "Surface habitable": "SIZE",
+            "Nombre de pièce": "ROOMS",
+            "Chambres": "BEDROOMS",
+            "Salle de bain": "BATHROOMS",
+            "Parking": "PARKING",
+            "Exposition": "VIEW",
+            "Balcon": "BALCONY_COUNT",
+            "Ascenseur": "ELEVATOR",
+            "Ville": "LOCATION",
+            "Etage": "FLOOR",
+            "Charges de copropriété": "COOWNERSHIP",
+            "Consommations énergétiques": "ENERGY_PERFORMANCE",
+            "Émissions de GES": "GREENHOUSE_EMISSION",
+        }
+
+    def parse(self, url: str) -> Optional[Item]:
+        """Parse an offer."""
+        try:
+            response = requests.get(url, timeout=300)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            LOGGER.warning("Failed to fetch page: %s, error: %s", url, exc)
+            return None
+
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        arg_dict = {}
+        # Extract Item Fields
+        arg_dict["TITLE"] = soup.find("div", class_="bloc_desc").find("h2").get_text()
+        arg_dict["DESCRIPTION"] = (
+            soup.find("div", class_="bloc_desc").find("p").get_text()
+        )
+        arg_dict["PRICE"] = soup.find("span", class_="prix").get_text()
+        arg_dict["REFERENCE"] = soup.find("span", class_="ref").get_text()
+
+        feature_list = soup.find("article", class_="info_plus_bien").find_all(
+            "span", class_="detail"
+        )
+        if feature_list:
+            try:
+                for feature in feature_list.find_all("li"):
+                    tup = self.clean_feature(feature)
+                    if not tup:
+                        LOGGER.warning("Feature not cleaned: %s", feature)
+                        continue
+                    if tup[0] in self.conversion_args:
+                        arg_dict[self.conversion_args[tup[0]]] = tup[1]
+                    else:
+                        LOGGER.warning(
+                            "Feature %s not found in conversion dict.", tup[0]
+                        )
+            except AttributeError:
+                LOGGER.warning("No feature found for %s", url)
+
+        item = Item(
+            SPIDER=self.name,
+            AGENCY="Agence Olivier",
+            DATE=date.today().isoformat(),
+            URL=url,
+            **arg_dict
+        )
+
+        return item
 
 
 class AscensionImmoSpider(Spider):
     """Class to scrap the website https://www.ascension-immo.com."""
 
-    def __init__(self, urls: List[str], name: str = "ascension-immo") -> None:
+    def __init__(self, urls: List[str], name: str = "ascension_immo") -> None:
         """Constructor for the AscensionImmo spider."""
         super().__init__(name=name, urls=urls)
         self.conversion_args: Dict[str, str] = {
@@ -90,16 +179,17 @@ class AscensionImmoSpider(Spider):
         feature_list = soup.find("div", class_="property_type_inner")
         if feature_list:
             for feature in feature_list.find_all("li"):
-                feature_data = feature.text.strip().split(":")
-                if len(feature_data) == 2:
-                    feature_name = re.sub(r"^\s|\s$", "", feature_data[0])
-                    feature_value = re.sub(r"^\s|\s$", "", feature_data[1])
-                    key = self.conversion_args.get(feature_name)
-                    if key:
-                        arg_dict[key] = feature_value
+                tup = self.clean_feature(feature)
+                if not tup:
+                    LOGGER.warning("Feature not cleaned: %s", feature)
+                    continue
+                if tup[0] in self.conversion_args:
+                    arg_dict[self.conversion_args[tup[0]]] = tup[1]
+                else:
+                    LOGGER.warning("Feature %s not found in conversion dict.", tup[0])
 
         item = Item(
-            SPIDER="ascension_immo",
+            SPIDER=self.name,
             AGENCY="Ascension Immobiler",
             DATE=date.today().isoformat(),
             URL=url,
@@ -122,12 +212,3 @@ class AscensionImmoSpider(Spider):
             return_value = None
 
         return return_value
-
-    def deploy(self) -> List[Item]:
-        """Deploy the spider."""
-        items = []
-        for url in self.urls:
-            item = self.parse(url)
-            if item:
-                items.append(item)
-        return items

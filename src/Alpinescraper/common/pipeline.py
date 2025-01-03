@@ -27,44 +27,80 @@ class ItemPipeline:
         self.json_filename: str = json_filename
         self.clean_item: List[Item] = self.clean_raw_data()
 
-    def serialize_int(self, string: str) -> Optional[int]:
+    def serialize_int(self, field_name: str, raw_item: Item) -> Optional[int]:
         """Serialize string values to integer."""
+        string = getattr(raw_item, field_name)
         tmp_string = "".join(re.findall(r"[-+]?\d+", string.strip()))
-        integer = int(tmp_string) if tmp_string or len(tmp_string) != 0 else None
-        if not integer:
+        try:
+            integer = int(tmp_string) if tmp_string or len(tmp_string) != 0 else None
+            return integer
+        except ValueError:
+            LOGGER.warning(
+                "value '%s' not recognised in int serializer for %s (%s).",
+                string,
+                field_name,
+                getattr(raw_item, "URL"),
+            )
             return None
-        return integer
 
-    def serialize_float(self, string: str) -> Optional[float]:
+    def serialize_float(self, field_name: str, raw_item: Item) -> Optional[float]:
         """Serialize string values to float."""
+        string = getattr(raw_item, field_name)
         tmp_string = "".join(re.findall(r"[-+]?(?:\d*\.*\d+)", string.strip()))
-        float_val = float(tmp_string) if tmp_string or len(tmp_string) != 0 else None
-        if not float_val:
+        try:
+            float_val = (
+                float(tmp_string) if tmp_string or len(tmp_string) != 0 else None
+            )
+            return float_val
+        except ValueError:
+            LOGGER.warning(
+                "value '%s' not recognised in float serializer for %s (%s).",
+                string,
+                field_name,
+                getattr(raw_item, "URL"),
+            )
             return None
-        return float_val
 
-    def serialize_bool(self, string: str) -> Optional[bool]:
+    def serialize_bool(self, field_name: str, raw_item: Item) -> Optional[bool]:
         """Serialize string values to boolean."""
+        string = getattr(raw_item, field_name)
         value = string.strip().lower()
-        true_values = ["yes", "true", "1"]
-        false_values = ["no", "false", "0"]
+        true_values = ["yes", "true", "1", "oui"]
+        false_values = ["no", "false", "0", "non"]
 
         if value not in true_values + false_values:
-            LOGGER.warning("value %s not recognised in bool serializer.", string)
+            LOGGER.warning(
+                "value '%s' not recognised in bool serializer for %s (%s).",
+                string,
+                field_name,
+                getattr(raw_item, "URL"),
+            )
             return None
 
         return value in true_values
 
-    def serialize_string(self, input_string: str) -> Optional[str]:
+    def serialize_string(self, field_name: str, raw_item: Item) -> Optional[str]:
         """Remove all occurrences of whitespace characters including newlines and strip leading and trailing whitespace."""
-        cleaned_string = re.sub(r"\s+", " ", input_string).strip()
+        string = getattr(raw_item, field_name)
+        cleaned_string = re.sub(r"\s+", " ", string).strip()
         if not cleaned_string:
+            LOGGER.warning(
+                "value '%s' not recognised in string serializer for %s (%s).",
+                string,
+                field_name,
+                getattr(raw_item, "URL"),
+            )
             return None
         return cleaned_string
 
-    def apply_serializer(self, serializer: Callable[[str], Any], value: str) -> Any:
+    def apply_serializer(
+        self, serializer: Callable[[str, Item], Any], field_name: str, raw_item: Item
+    ) -> Any:
         """Apply the serializer to value based on the type define."""
-        return serializer(value) if value is not None else None
+        value = getattr(raw_item, field_name)
+        if value is None:
+            return None
+        return serializer(field_name, raw_item)
 
     def clean_raw_data(self) -> List[Item]:
         """Clean the data based on the type defined in the item."""
@@ -72,36 +108,35 @@ class ItemPipeline:
         for item in self.raw_item:
             tmp_item = replace(item)
             for field in fields(item):
-                field_value = getattr(item, field.name)
                 if field.type in (Optional[float], float):
                     setattr(
                         tmp_item,
                         field.name,
-                        self.apply_serializer(self.serialize_float, field_value),
+                        self.apply_serializer(self.serialize_float, field.name, item),
                     )
                 elif field.type in (Optional[str], str):
                     setattr(
                         tmp_item,
                         field.name,
-                        self.apply_serializer(self.serialize_string, field_value),
+                        self.apply_serializer(self.serialize_string, field.name, item),
                     )
                 elif field.type in (Optional[int], int):
                     setattr(
                         tmp_item,
                         field.name,
-                        self.apply_serializer(self.serialize_int, field_value),
+                        self.apply_serializer(self.serialize_int, field.name, item),
                     )
                 elif field.type in (Optional[bool], bool):
                     setattr(
                         tmp_item,
                         field.name,
-                        self.apply_serializer(self.serialize_bool, field_value),
+                        self.apply_serializer(self.serialize_bool, field.name, item),
                     )
                 else:
                     LOGGER.warning(
                         "Data types not recognised for %s and value %s.",
                         field.name,
-                        field_value,
+                        getattr(item, field.name),
                     )
             clean_data.append(tmp_item)
 
