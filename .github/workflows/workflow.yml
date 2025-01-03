@@ -9,9 +9,9 @@ env:
   MONGODB_PWD: ${{ secrets.MONGODB_PWD }}
   MONGODB_USER: ${{ secrets.MONGODB_USER }}
   MONGODB_DATABASE: ${{ secrets.MONGODB_DATABASE }}
-  AGENCEOLIVIER_ARGS: --collection_name AGENCEOLIVIER --nb_spider 10 --scraper agenceolivier --append True
-  ACMIMMOBILIER_ARGS: --collection_name ACMIMMOBILIER --nb_spider 15 --scraper acmimmobilier --append True
-  ASCENSIONIMMO_ARGS: --collection_name ASCENSIONIMMO --nb_spider 15 --scraper ascensionimmo --append True
+  AGENCEOLIVIER_ARGS: --collection_name AGENCEOLIVIER --nb_spider 10 --scraper agenceolivier --append
+  ACMIMMOBILIER_ARGS: --collection_name ACMIMMOBILIER --nb_spider 15 --scraper acmimmobilier --append
+  ASCENSIONIMMO_ARGS: --collection_name ASCENSIONIMMO --nb_spider 15 --scraper ascensionimmo --append
 
 jobs:
   set-env:
