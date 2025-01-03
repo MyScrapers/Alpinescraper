@@ -48,4 +48,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 COPY --from=builder /app/.venv /app/.venv
 
 # Default command. Can be overridden using docker run <image> <command>
-CMD ["main", "--nb_spider", "10"]
+CMD ["main_mongodb", "--nb_spider", "10"]
