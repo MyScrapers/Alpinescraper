@@ -144,6 +144,7 @@ target
 .project
 .idea
 *.iml
+*.ipynb
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 
@@ -157,5 +158,6 @@ mlruns/
 out.csv
 
 *.tmp
+*.json
 dependency-check-report.*
 credentials.env

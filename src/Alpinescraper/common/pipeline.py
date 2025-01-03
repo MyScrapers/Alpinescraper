@@ -5,11 +5,12 @@ import logging
 import os
 import re
 from dataclasses import asdict, fields, replace
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from pymongo import MongoClient
-import ssl
-from Alpinescraper.common.items import LuxuryestateItem
+
+from Alpinescraper.common.items import Item
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,127 +20,188 @@ class ItemPipeline:
 
     def __init__(
         self,
-        raw_item: List[LuxuryestateItem],
-        json_filename: str = "RESULT.JSON",
+        raw_item: List[Item],
     ) -> None:
         """Pipeline constructor."""
-        self.raw_item: List[LuxuryestateItem] = raw_item
-        self.json_filename: str = json_filename
-        self.clean_item: List[LuxuryestateItem] = self.clean_raw_data()
+        self.raw_item: List[Item] = raw_item
+        self.clean_item: List[Item] = self.clean_raw_data()
 
-    def serialize_int(self, string: str) -> Optional[int]:
+    def serialize_int(self, field_name: str, raw_item: Item) -> Optional[int]:
         """Serialize string values to integer."""
-        integer = int("".join(re.findall(r"[-+]?\d+", string.strip())))
-        if not integer:
+        string = getattr(raw_item, field_name)
+        tmp_string = "".join(re.findall(r"[-+]?\d+", string.strip()))
+        try:
+            integer = int(tmp_string) if tmp_string or len(tmp_string) != 0 else None
+            return integer
+        except ValueError:
+            LOGGER.warning(
+                "value '%s' not recognised in int serializer for %s (%s).",
+                string,
+                field_name,
+                getattr(raw_item, "URL"),
+            )
             return None
-        return integer
 
-    def serialize_float(self, string: str) -> Optional[float]:
+    def serialize_float(self, field_name: str, raw_item: Item) -> Optional[float]:
         """Serialize string values to float."""
-        float_val = float("".join(re.findall(r"[-+]?(?:\d*\.*\d+)", string.strip())))
-        if not float_val:
+        string = getattr(raw_item, field_name)
+        tmp_string = "".join(re.findall(r"[-+]?(?:\d*\.*\d+)", string.strip()))
+        try:
+            float_val = (
+                float(tmp_string) if tmp_string or len(tmp_string) != 0 else None
+            )
+            return float_val
+        except ValueError:
+            LOGGER.warning(
+                "value '%s' not recognised in float serializer for %s (%s).",
+                string,
+                field_name,
+                getattr(raw_item, "URL"),
+            )
             return None
-        return float_val
 
-    def serialize_bool(self, string: str) -> Optional[bool]:
+    def serialize_bool(self, field_name: str, raw_item: Item) -> Optional[bool]:
         """Serialize string values to boolean."""
+        string = getattr(raw_item, field_name)
         value = string.strip().lower()
-        true_values = ["yes", "true", "1"]
-        false_values = ["no", "false", "0"]
+        true_values = ["yes", "true", "1", "oui"]
+        false_values = ["no", "false", "0", "non"]
 
         if value not in true_values + false_values:
-            LOGGER.warning("value %s not recognised in bool serializer.", string)
+            LOGGER.warning(
+                "value '%s' not recognised in bool serializer for %s (%s).",
+                string,
+                field_name,
+                getattr(raw_item, "URL"),
+            )
             return None
 
         return value in true_values
 
-    def serialize_string(self, input_string: str) -> Optional[str]:
-        """Strip leading and trailing whitespace characters including newlines."""
-        cleaned_string = input_string.strip()
+    def serialize_string(self, field_name: str, raw_item: Item) -> Optional[str]:
+        """Remove all occurrences of whitespace characters including newlines and strip leading and trailing whitespace."""
+        string = getattr(raw_item, field_name)
+        cleaned_string = re.sub(r"\s+", " ", string).strip()
         if not cleaned_string:
+            LOGGER.warning(
+                "value '%s' not recognised in string serializer for %s (%s).",
+                string,
+                field_name,
+                getattr(raw_item, "URL"),
+            )
             return None
         return cleaned_string
 
-    def apply_serializer(self, serializer: Callable[[str], Any], value: str) -> Any:
+    def apply_serializer(
+        self, serializer: Callable[[str, Item], Any], field_name: str, raw_item: Item
+    ) -> Any:
         """Apply the serializer to value based on the type define."""
-        return serializer(value) if value is not None else None
+        value = getattr(raw_item, field_name)
+        if value is None:
+            return None
+        return serializer(field_name, raw_item)
 
-    def clean_raw_data(self) -> List[LuxuryestateItem]:
+    def clean_raw_data(self) -> List[Item]:
         """Clean the data based on the type defined in the item."""
-        clean_data: List[LuxuryestateItem] = []
+        clean_data: List[Item] = []
         for item in self.raw_item:
             tmp_item = replace(item)
             for field in fields(item):
-                field_value = getattr(item, field.name)
                 if field.type in (Optional[float], float):
                     setattr(
                         tmp_item,
                         field.name,
-                        self.apply_serializer(self.serialize_float, field_value),
+                        self.apply_serializer(self.serialize_float, field.name, item),
                     )
                 elif field.type in (Optional[str], str):
                     setattr(
                         tmp_item,
                         field.name,
-                        self.apply_serializer(self.serialize_string, field_value),
+                        self.apply_serializer(self.serialize_string, field.name, item),
                     )
                 elif field.type in (Optional[int], int):
                     setattr(
                         tmp_item,
                         field.name,
-                        self.apply_serializer(self.serialize_int, field_value),
+                        self.apply_serializer(self.serialize_int, field.name, item),
                     )
                 elif field.type in (Optional[bool], bool):
                     setattr(
                         tmp_item,
                         field.name,
-                        self.apply_serializer(self.serialize_bool, field_value),
+                        self.apply_serializer(self.serialize_bool, field.name, item),
                     )
                 else:
                     LOGGER.warning(
                         "Data types not recognised for %s and value %s.",
                         field.name,
-                        field_value,
+                        getattr(item, field.name),
                     )
             clean_data.append(tmp_item)
 
         return clean_data
 
-    def write_json(self) -> None:
-        """Writes the data scraped in the json defined in attributes."""
-        LOGGER.info("Writing data in : %s", self.json_filename)
-        with open(self.json_filename, "w", encoding="utf-8") as file:
-            json.dump(
-                [asdict(item) for item in self.clean_item],
-                file,
-                ensure_ascii=False,
-                indent=4,
-            )
+    def write_json(
+        self, json_filename: str = "result.json", append: bool = False
+    ) -> None:
+        """Writes the data scraped in the JSON defined.
 
-    def write_mongodb(self, collection: str) -> None:
-        """Writes the data scraped in the json defined in attributes."""
+        Args:
+            json_filename (str): The name of the JSON file to write to.
+                Defaults to "result.json".
+            append (bool): If True, appends the data to the existing JSON file.
+                If False, replaces the file content. Defaults to False.
+        """
+        LOGGER.info("Writing data in: %s", json_filename)
+
+        if append and Path(json_filename).exists():
+            with open(json_filename, "r", encoding="utf-8") as file:
+                try:
+                    existing_data = json.load(file)
+                    if not isinstance(existing_data, list):
+                        LOGGER.warning("Existing data is not a list. Overwriting.")
+                        existing_data = []
+                except json.JSONDecodeError:
+                    LOGGER.warning("Error decoding existing JSON. Starting fresh.")
+                    existing_data = []
+        else:
+            existing_data = []
+
+        combined_data = existing_data + [asdict(item) for item in self.clean_item]
+        with open(json_filename, "w", encoding="utf-8") as file:
+            json.dump(combined_data, file, ensure_ascii=False, indent=4)
+
+    def write_mongodb(self, collection_name: str, append: bool = False) -> None:
+        """Writes the data scraped in the collection.
+
+        Args:
+            collection_name (str): The name of the collection.
+            append (bool): If True, append data to the collection. If False, overwrite the collection. Default is False.
+        """
         pwd = os.environ["MONGODB_PWD"]
         user = os.environ["MONGODB_USER"]
         mongo_database = os.environ["MONGODB_DATABASE"]
         LOGGER.info("Writing data in : %s", mongo_database)
 
         connection_string = f"mongodb+srv://{user}:{pwd}@cluster0.g0glf.mongodb.net/{mongo_database}?retryWrites=true&w=majority"
-        client = MongoClient(connection_string, ssl=True, ssl_cert_reqs=ssl.CERT_NONE)
         try:
             client: MongoClient[Dict[str, Any]] = MongoClient(connection_string)
         except Exception as exception:  # pylint: disable=broad-exception-caught
             LOGGER.error("Couldn't connect to MongoDB: %s", exception)
-        database_conection = client[mongo_database]
-        tmp_collection = database_conection[collection]
+            return
 
-        # Clean the collection
-        tmp_collection.delete_many({})
+        database_connection = client[mongo_database]
+        tmp_collection = database_connection[collection_name]
+
+        if not append:
+            # Clean the collection if append is False
+            tmp_collection.delete_many({})
 
         # Insert the new data
         try:
             tmp_collection.insert_many([asdict(item) for item in self.clean_item])
             LOGGER.info(
-                "Data successfully written to MongoDB collection: %s", collection
+                "Data successfully written to MongoDB collection: %s", collection_name
             )
         except Exception as exception:  # pylint: disable=broad-exception-caught
             LOGGER.error("Error writing data to MongoDB: %s", exception)

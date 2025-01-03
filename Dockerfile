@@ -48,4 +48,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 COPY --from=builder /app/.venv /app/.venv
 
 # Default command. Can be overridden using docker run <image> <command>
-CMD ["poetry", "run", "main", "25"]
+CMD ["main", "--nb_spider", "10"]
