@@ -171,8 +171,13 @@ class ItemPipeline:
         with open(json_filename, "w", encoding="utf-8") as file:
             json.dump(combined_data, file, ensure_ascii=False, indent=4)
 
-    def write_mongodb(self, collection: str) -> None:
-        """Writes the data scraped in the json defined in attributes."""
+    def write_mongodb(self, collection_name: str, append: bool = False) -> None:
+        """Writes the data scraped in the collection.
+
+        Args:
+            collection_name (str): The name of the collection.
+            append (bool): If True, append data to the collection. If False, overwrite the collection. Default is False.
+        """
         pwd = os.environ["MONGODB_PWD"]
         user = os.environ["MONGODB_USER"]
         mongo_database = os.environ["MONGODB_DATABASE"]
@@ -183,17 +188,20 @@ class ItemPipeline:
             client: MongoClient[Dict[str, Any]] = MongoClient(connection_string)
         except Exception as exception:  # pylint: disable=broad-exception-caught
             LOGGER.error("Couldn't connect to MongoDB: %s", exception)
-        database_conection = client[mongo_database]
-        tmp_collection = database_conection[collection]
+            return
 
-        # Clean the collection
-        tmp_collection.delete_many({})
+        database_connection = client[mongo_database]
+        tmp_collection = database_connection[collection_name]
+
+        if not append:
+            # Clean the collection if append is False
+            tmp_collection.delete_many({})
 
         # Insert the new data
         try:
             tmp_collection.insert_many([asdict(item) for item in self.clean_item])
             LOGGER.info(
-                "Data successfully written to MongoDB collection: %s", collection
+                "Data successfully written to MongoDB collection: %s", collection_name
             )
         except Exception as exception:  # pylint: disable=broad-exception-caught
             LOGGER.error("Error writing data to MongoDB: %s", exception)

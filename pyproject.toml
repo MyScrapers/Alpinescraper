@@ -29,7 +29,8 @@ isort = "~5.13"                                     # Tool for reordering python
 mypy = "~1.8"                                       # Tool for static type-checking
 
 [tool.poetry.scripts]
-main = 'Alpinescraper.main:main'
+main_json = 'Alpinescraper.main:main_json'
+main_mongodb = 'Alpinescraper.main:main_mongodb'
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
