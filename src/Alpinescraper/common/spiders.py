@@ -32,7 +32,7 @@ class Spider:
         items = []
         for url in self.urls:
             item = self.parse(url)
-            sleep(1)
+            sleep(5)
             if item:
                 items.append(item)
         return items
