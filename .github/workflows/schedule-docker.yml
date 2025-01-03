@@ -1,4 +1,4 @@
-name: Run Docker Container on Schedule
+name: Run Alpinescraper on Schedule
 
 on:
   schedule:
