@@ -5,10 +5,15 @@ on:
     - cron: '0 0 * * *' # Runs every day at midnight
   workflow_dispatch: # Allows manual triggering
 
-jobs:
-  run-docker-container:
-    runs-on: ubuntu-latest
+env:
+  MONGODB_PWD: ${{ secrets.MONGODB_PWD }}
+  MONGODB_USER: ${{ secrets.MONGODB_USER }}
+  MONGODB_DATABASE: ${{ secrets.MONGODB_DATABASE }}
+  DOCKER_ARGS: --collection_name TESTBIS --nb_spider 25 --scraper acmimmobilier
 
+jobs:
+  set-env:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -19,14 +24,15 @@ jobs:
       - name: Log in to DockerHub
         run: echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
+  run-docker-container:
+    needs: set-env
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Run Docker container
-        env:
-          MONGODB_PWD: ${{ secrets.MONGODB_PWD }}
-          MONGODB_USER: ${{ secrets.MONGODB_USER }}
-          MONGODB_DATABASE: ${{ secrets.MONGODB_DATABASE }}
         run: |
           docker run --rm \
             -e MONGODB_PWD="${{ secrets.MONGODB_PWD }}" \
             -e MONGODB_USER="${{ secrets.MONGODB_USER }}" \
             -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
-            julienhae/alpinescraper:latest
+            julienhae/alpinescraper:latest main_mongodb ${{ env.DOCKER_ARGS }}
