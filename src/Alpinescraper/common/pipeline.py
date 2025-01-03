@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from dataclasses import asdict, fields, replace
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from pymongo import MongoClient
@@ -20,11 +21,9 @@ class ItemPipeline:
     def __init__(
         self,
         raw_item: List[Item],
-        json_filename: str = "RESULT.JSON",
     ) -> None:
         """Pipeline constructor."""
         self.raw_item: List[Item] = raw_item
-        self.json_filename: str = json_filename
         self.clean_item: List[Item] = self.clean_raw_data()
 
     def serialize_int(self, field_name: str, raw_item: Item) -> Optional[int]:
@@ -142,16 +141,35 @@ class ItemPipeline:
 
         return clean_data
 
-    def write_json(self) -> None:
-        """Writes the data scraped in the json defined in attributes."""
-        LOGGER.info("Writing data in : %s", self.json_filename)
-        with open(self.json_filename, "w", encoding="utf-8") as file:
-            json.dump(
-                [asdict(item) for item in self.clean_item],
-                file,
-                ensure_ascii=False,
-                indent=4,
-            )
+    def write_json(
+        self, json_filename: str = "result.json", append: bool = False
+    ) -> None:
+        """Writes the data scraped in the JSON defined.
+
+        Args:
+            json_filename (str): The name of the JSON file to write to.
+                Defaults to "result.json".
+            append (bool): If True, appends the data to the existing JSON file.
+                If False, replaces the file content. Defaults to False.
+        """
+        LOGGER.info("Writing data in: %s", json_filename)
+
+        if append and Path(json_filename).exists():
+            with open(json_filename, "r", encoding="utf-8") as file:
+                try:
+                    existing_data = json.load(file)
+                    if not isinstance(existing_data, list):
+                        LOGGER.warning("Existing data is not a list. Overwriting.")
+                        existing_data = []
+                except json.JSONDecodeError:
+                    LOGGER.warning("Error decoding existing JSON. Starting fresh.")
+                    existing_data = []
+        else:
+            existing_data = []
+
+        combined_data = existing_data + [asdict(item) for item in self.clean_item]
+        with open(json_filename, "w", encoding="utf-8") as file:
+            json.dump(combined_data, file, ensure_ascii=False, indent=4)
 
     def write_mongodb(self, collection: str) -> None:
         """Writes the data scraped in the json defined in attributes."""
