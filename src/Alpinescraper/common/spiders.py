@@ -4,6 +4,7 @@
 import logging
 import re
 from datetime import date
+from random import randint
 from time import sleep
 from typing import Dict, List, Optional, Tuple
 
@@ -32,7 +33,7 @@ class Spider:
         items = []
         for url in self.urls:
             item = self.parse(url)
-            sleep(5)
+            sleep(randint(5, 15))
             if item:
                 items.append(item)
         return items
@@ -44,7 +45,6 @@ class Spider:
             feature_name = re.sub(r"^\s|\s$", "", feature_data[0])
             feature_value = re.sub(r"^\s|\s$", "", feature_data[1])
             return feature_name, feature_value
-        logging.warning("Feature not cleaned: %s", feature)
         return None
 
 
@@ -313,3 +313,117 @@ class AscensionImmoSpider(Spider):
             return_value = None
 
         return return_value
+
+
+class MorzineImmoSpider(Spider):
+    """Class to scrap the website https://www.morzine-immo.com/fr/."""
+
+    def __init__(self, urls: List[str], name: str = "morzine-immo") -> None:
+        """Constructor for the MorzineImmo spider."""
+        super().__init__(name, urls)
+        self.conversion_args: Dict[str, str] = {
+            "Chambres": "BEDROOMS",
+            "Salle de bain": "BATHROOMS",
+            "Etages": "FLOOR",
+            "Surface Habitable": "SIZE",
+        }
+
+    def parse(self, url: str) -> Optional[Item]:
+        """Parse an offer."""
+        try:
+            response = requests.get(url, timeout=300)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            LOGGER.warning("Failed to fetch page: %s, error: %s", url, exc)
+            return None
+
+        soup = BeautifulSoup(response.content, "html5lib")
+
+        arg_dict = {}
+        # Extract Item Fields
+        arg_dict["TITLE"] = soup.find("h1", class_="entry-title").get_text(strip=True)
+        arg_dict["DESCRIPTION"] = (
+            soup.find("h3", string="Description de la propriété")
+            .find_next("p")
+            .get_text(strip=True)
+        )
+        arg_dict["PRICE"] = soup.find("div", class_="price").get_text(strip=True)
+        arg_dict["REFERENCE"] = soup.find(
+            "li", string=lambda x: x and "Référence" in x
+        ).get_text(strip=True)
+
+        feature_list = soup.find("div", class_="property-meta")
+        if feature_list:
+            try:
+                for feature in feature_list.find_all("li"):
+                    tup = self.clean_feature(feature)
+                    if tup:
+                        arg_dict[tup[0]] = tup[1]
+
+            except AttributeError:
+                LOGGER.warning("No feature found for %s", url)
+
+        item = Item(
+            SPIDER=self.name,
+            AGENCY="Morzine IMMO",
+            DATE=date.today().isoformat(),
+            URL=url,
+            **arg_dict
+        )
+
+        return item
+
+    def clean_feature(self, feature: element.Tag) -> Optional[Tuple[str, str]]:
+        """Clean a feature for this specific scraper."""
+        tmp_feat = feature.get_text(strip=True).lower()
+        useless_feature = [
+            "référence",
+            "taxe",
+            "sauna",
+            "local",
+            "salon",
+            "buanderie",
+            "cinéma",
+            "cabine",
+            "land",
+            "bibliothèque",
+            "séjour",
+            "terrain",
+            "entrée",
+            "salle",
+            "mezzanine",
+            "commercial",
+            "bureau",
+            "piscine",
+            "master",
+            "dégagement",
+            "studio",
+            "sous-sol",
+        ]
+
+        for useless in useless_feature:
+            if useless in tmp_feat:
+                return None
+        tup = super().clean_feature(feature)
+        if tup:
+            return (self.conversion_args[tup[0]], tup[1])
+
+        tmp_convert_dict = {
+            ("GARAGE", "1"): ["garage"],
+            ("TERRACE", "1"): ["terrasse"],
+            ("BALCONY_COUNT", "1"): ["balcon"],
+            ("TYPE", "Appartement"): ["apartment", "apartment", "appartement"],
+            ("TYPE", "Chalet"): ["chalet", "chalet"],
+            ("GARDEN", "Yes"): ["jardin"],
+            ("KITCHEN_TYPE", "Yes"): ["cuisine"],
+            ("PARKING", "1"): ["parking"],
+            ("INTERIOR_AMENITIES", ""): ["cave"],
+        }
+
+        for return_value, key_list in tmp_convert_dict.items():
+            for key in key_list:
+                if key in tmp_feat:
+                    return return_value
+
+        LOGGER.warning("Feature not cleaned: %s", feature)
+        return None
