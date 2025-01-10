@@ -16,6 +16,8 @@ from Alpinescraper.common.spiders import (
     AcmImmobilierSpider,
     AgenceOlivierSpider,
     AscensionImmoSpider,
+    CimalpeSpider,
+    MorzineImmoSpider,
     Spider,
 )
 
@@ -207,3 +209,101 @@ class AscensionImmoOrchestrator(ScrapingOrchestrator):
     def spider_class(self) -> Type[AscensionImmoSpider]:
         """Return the class of the spider used."""
         return AscensionImmoSpider
+
+
+class MorzineImmorchestrator(ScrapingOrchestrator):
+    """Class to orchestrate the deployment of MorzineImmo spiders."""
+
+    def __init__(
+        self,
+        nb_spider: int,
+        base_url: str = "https://www.morzine-immo.com/fr/acheter/",
+    ) -> None:
+        """Initialize a MorzineImmorchestrator object."""
+        super().__init__(nb_spider, base_url)
+
+    def fetch_urls(self) -> List[str]:
+        """Fetch the URL for the website."""
+        page_number = 1
+        urls: List[str] = []
+        page_url = self.base_url
+
+        try:
+            response = requests.get(self.base_url, timeout=300)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            LOGGER.error("Failed to fetch page: %s, error: %s", self.base_url, exc)
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        while soup.find("a", class_="next page-numbers") is not None:
+            LOGGER.info("Fetching: %s", page_url)
+            soup = BeautifulSoup(response.content, "html.parser")
+            for offer in soup.find_all("article", class_="rental-property"):
+                href = offer.find("a", href=True).get("href")
+                if href:
+                    urls.append(href)
+
+            page_number += 1
+            page_url = self.base_url + f"page/{page_number}/"
+            try:
+                response = requests.get(page_url, timeout=300)
+                response.raise_for_status()
+            except requests.RequestException as exc:
+                LOGGER.error("Failed to fetch page: %s, error: %s", page_url, exc)
+
+        return urls
+
+    @property
+    def spider_class(self) -> Type[MorzineImmoSpider]:
+        """Return the class of the spider used."""
+        return MorzineImmoSpider
+
+
+class CimalpesOrchestrator(ScrapingOrchestrator):
+    """Class to orchestrate the deployment of Cimalpes spiders."""
+
+    def __init__(
+        self,
+        nb_spider: int,
+        base_url: str = "https://cimalpes.com/fr/recherche-immobilier/",
+    ) -> None:
+        """Initialize a CimalpesOrchestrator object."""
+        super().__init__(nb_spider, base_url)
+
+    def fetch_urls(self) -> List[str]:
+        """Fetch the URL for the website."""
+        page_number = 1
+        urls: List[str] = []
+        page_url = self.base_url
+
+        try:
+            response = requests.get(self.base_url, timeout=300)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            LOGGER.error("Failed to fetch page: %s, error: %s", self.base_url, exc)
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        while soup.find("a", class_="page-link btn btn-primary pointeur") is not None:
+            LOGGER.info("Fetching: %s", page_url)
+            soup = BeautifulSoup(response.content, "html.parser")
+            for offer in soup.find_all("div", class_="col-sm-6 col-lg-4 py-4"):
+                href = offer.find("a", href=True).get("href")
+                if href:
+                    urls.append(urljoin(self.base_url, href))
+
+            page_number += 1
+            page_url = (
+                self.base_url + f"?&rtype=achat&page_nb={page_number}&chambre=-1/"
+            )
+            try:
+                response = requests.get(page_url, timeout=300)
+                response.raise_for_status()
+            except requests.RequestException as exc:
+                LOGGER.error("Failed to fetch page: %s, error: %s", page_url, exc)
+
+        return urls
+
+    @property
+    def spider_class(self) -> Type[CimalpeSpider]:
+        """Return the class of the spider used."""
+        return CimalpeSpider

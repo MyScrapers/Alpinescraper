@@ -12,6 +12,8 @@ env:
   AGENCEOLIVIER_ARGS: --collection_name AGENCEOLIVIER --nb_spider 10 --scraper agenceolivier --append
   ACMIMMOBILIER_ARGS: --collection_name ACMIMMOBILIER --nb_spider 15 --scraper acmimmobilier --append
   ASCENSIONIMMO_ARGS: --collection_name ASCENSIONIMMO --nb_spider 15 --scraper ascensionimmo --append
+  MORZINEIMMO_ARGS: --collection_name MORZINEIMMO --nb_spider 5 --scraper morzineimmo --append
+  CIMALPES_ARGS: --collection_name CIMALPES --nb_spider 25 --scraper cimalpes --append
 
 jobs:
   set-env:
@@ -64,3 +66,29 @@ jobs:
             -e MONGODB_USER="${{ secrets.MONGODB_USER }}" \
             -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
             julienhae/alpinescraper:latest main_mongodb ${{ env.ASCENSIONIMMO_ARGS }}
+
+  alpinescrape-cimalpes:
+    needs: set-env
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Scrape Cimalpes
+        run: |
+          docker run --rm \
+            -e MONGODB_PWD="${{ secrets.MONGODB_PWD }}" \
+            -e MONGODB_USER="${{ secrets.MONGODB_USER }}" \
+            -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
+            julienhae/alpinescraper:latest main_mongodb ${{ env.CIMALPES_ARGS }}
+
+  alpinescrape-morzineImmo:
+    needs: set-env
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Scrape Morzine Imo
+        run: |
+          docker run --rm \
+            -e MONGODB_PWD="${{ secrets.MONGODB_PWD }}" \
+            -e MONGODB_USER="${{ secrets.MONGODB_USER }}" \
+            -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
+            julienhae/alpinescraper:latest main_mongodb ${{ env.MORZINEIMMO_ARGS }}

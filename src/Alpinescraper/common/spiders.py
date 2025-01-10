@@ -4,6 +4,7 @@
 import logging
 import re
 from datetime import date
+from random import randint
 from time import sleep
 from typing import Dict, List, Optional, Tuple
 
@@ -32,7 +33,7 @@ class Spider:
         items = []
         for url in self.urls:
             item = self.parse(url)
-            sleep(5)
+            sleep(randint(5, 15))
             if item:
                 items.append(item)
         return items
@@ -44,7 +45,6 @@ class Spider:
             feature_name = re.sub(r"^\s|\s$", "", feature_data[0])
             feature_value = re.sub(r"^\s|\s$", "", feature_data[1])
             return feature_name, feature_value
-        logging.warning("Feature not cleaned: %s", feature)
         return None
 
 
@@ -88,14 +88,20 @@ class AcmImmobilierSpider(Spider):
 
         arg_dict = {}
         # Extract Item Fields
-        arg_dict["TITLE"] = soup.find("title").get_text()
-        arg_dict["DESCRIPTION"] = soup.find("div", id="description").get_text(
-            strip=True
-        )
-        arg_dict["PRICE"] = soup.find("span", class_="prix").get_text(strip=True)
-        arg_dict["REFERENCE"] = soup.find("span", class_="reference").get_text(
-            strip=True
-        )
+        try:
+            arg_dict["TITLE"] = soup.find("title").get_text(strip=True)
+            arg_dict["DESCRIPTION"] = soup.find("div", id="description").get_text(
+                strip=True
+            )
+            arg_dict["PRICE"] = soup.find("span", class_="prix").get_text(strip=True)
+            arg_dict["REFERENCE"] = soup.find("span", class_="reference").get_text(
+                strip=True
+            )
+        except AttributeError as exc:
+            LOGGER.warning(
+                "Failed to fetch mandatory attributes for: %s, error: %s", url, exc
+            )
+            return None
 
         feature_list = soup.find("div", class_="critere-wrapper").find_all("div")
         if feature_list:
@@ -170,12 +176,14 @@ class AgenceOlivierSpider(Spider):
 
         arg_dict = {}
         # Extract Item Fields
-        arg_dict["TITLE"] = soup.find("div", class_="bloc_desc").find("h2").get_text()
-        arg_dict["DESCRIPTION"] = (
-            soup.find("div", class_="bloc_desc").find("p").get_text()
+        arg_dict["TITLE"] = (
+            soup.find("div", class_="bloc_desc").find("h2").get_text(strip=True)
         )
-        arg_dict["PRICE"] = soup.find("span", class_="prix").get_text()
-        arg_dict["REFERENCE"] = soup.find("span", class_="ref").get_text()
+        arg_dict["DESCRIPTION"] = (
+            soup.find("div", class_="bloc_desc").find("p").get_text(strip=True)
+        )
+        arg_dict["PRICE"] = soup.find("span", class_="prix").get_text(strip=True)
+        arg_dict["REFERENCE"] = soup.find("span", class_="ref").get_text(strip=True)
 
         feature_list = soup.find("article", class_="info_plus_bien").find_all(
             "span", class_="detail"
@@ -313,3 +321,229 @@ class AscensionImmoSpider(Spider):
             return_value = None
 
         return return_value
+
+
+class MorzineImmoSpider(Spider):
+    """Class to scrap the website https://www.morzine-immo.com/fr/."""
+
+    def __init__(self, urls: List[str], name: str = "morzine-immo") -> None:
+        """Constructor for the MorzineImmo spider."""
+        super().__init__(name, urls)
+        self.conversion_args: Dict[str, str] = {
+            "Chambres": "BEDROOMS",
+            "Salle de bain": "BATHROOMS",
+            "Etages": "FLOOR",
+            "Surface Habitable": "SIZE",
+        }
+
+    def parse(self, url: str) -> Optional[Item]:
+        """Parse an offer."""
+        try:
+            response = requests.get(url, timeout=300)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            LOGGER.warning("Failed to fetch page: %s, error: %s", url, exc)
+            return None
+
+        soup = BeautifulSoup(response.content, "html5lib")
+
+        arg_dict = {}
+        # Extract Item Fields
+        arg_dict["TITLE"] = soup.find("h1", class_="entry-title").get_text(strip=True)
+        arg_dict["DESCRIPTION"] = (
+            soup.find("h3", string="Description de la propriété")
+            .find_next("p")
+            .get_text(strip=True)
+        )
+        arg_dict["PRICE"] = soup.find("div", class_="price").get_text(strip=True)
+        arg_dict["REFERENCE"] = soup.find(
+            "li", string=lambda x: x and "Référence" in x
+        ).get_text(strip=True)
+
+        feature_list = soup.find("div", class_="property-meta")
+        if feature_list:
+            try:
+                for feature in feature_list.find_all("li"):
+                    tup = self.clean_feature(feature)
+                    if tup:
+                        arg_dict[tup[0]] = tup[1]
+
+            except AttributeError:
+                LOGGER.warning("No feature found for %s", url)
+
+        item = Item(
+            SPIDER=self.name,
+            AGENCY="Morzine IMMO",
+            DATE=date.today().isoformat(),
+            URL=url,
+            **arg_dict
+        )
+
+        return item
+
+    def clean_feature(self, feature: element.Tag) -> Optional[Tuple[str, str]]:
+        """Clean a feature for this specific scraper."""
+        tmp_feat = feature.get_text(strip=True).lower()
+        useless_feature = [
+            "référence",
+            "taxe",
+            "sauna",
+            "local",
+            "salon",
+            "buanderie",
+            "cinéma",
+            "cabine",
+            "land",
+            "bibliothèque",
+            "séjour",
+            "terrain",
+            "entrée",
+            "salle",
+            "mezzanine",
+            "commercial",
+            "bureau",
+            "piscine",
+            "master",
+            "dégagement",
+            "studio",
+            "sous-sol",
+        ]
+
+        for useless in useless_feature:
+            if useless in tmp_feat:
+                return None
+        tup = super().clean_feature(feature)
+        if tup:
+            return (self.conversion_args[tup[0]], tup[1])
+
+        tmp_convert_dict = {
+            ("GARAGE", "1"): ["garage"],
+            ("TERRACE", "1"): ["terrasse"],
+            ("BALCONY_COUNT", "1"): ["balcon"],
+            ("TYPE", "Appartement"): ["apartment", "apartment", "appartement"],
+            ("TYPE", "Chalet"): ["chalet", "chalet"],
+            ("GARDEN", "Yes"): ["jardin"],
+            ("KITCHEN_TYPE", "Yes"): ["cuisine"],
+            ("PARKING", "1"): ["parking"],
+            ("INTERIOR_AMENITIES", ""): ["cave"],
+        }
+
+        for return_value, key_list in tmp_convert_dict.items():
+            for key in key_list:
+                if key in tmp_feat:
+                    return return_value
+
+        LOGGER.warning("Feature not cleaned: %s", feature)
+        return None
+
+
+class CimalpeSpider(Spider):
+    """Class to scrap the website https://cimalpes.com/fr/."""
+
+    def __init__(self, urls: List[str], name: str = "agence_olivier") -> None:
+        """Constructor for the Cimalpes spider."""
+        super().__init__(name, urls)
+        self.conversion_args: Dict[str, str] = {
+            "Surface habitable": "SIZE",
+            "Surface": "SIZE",
+            "Chambres": "BEDROOMS",
+            "Salle d'eau": "BATHROOMS",
+            "Salles de bain": "BATHROOMS",
+            "Salles d'eau": "BATHROOMS",
+            "WC": "WC",
+            "Cuisine": "KITCHEN_TYPE",
+            "Étage ": "FLOOR",
+            "Niveaux": "NB_FLOOR",
+            "Bien en copropriété": "COOWNERSHIP",
+        }
+
+    def parse(self, url: str) -> Optional[Item]:
+        """Parse an offer."""
+        try:
+            response = requests.get(url, timeout=300)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            LOGGER.warning("Failed to fetch page: %s, error: %s", url, exc)
+            return None
+
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        arg_dict = {}
+        # Extract Item Fields
+        try:
+            arg_dict["TITLE"] = soup.find(
+                "h1",
+                class_="montserrat font26 font-xs-20 semi-bold nuit-hiver text-uppercase mb-0 mt-2",
+            ).get_text(strip=True)
+            arg_dict["DESCRIPTION"] = soup.find("div", id="manifest").get_text(
+                strip=True
+            )
+            arg_dict["PRICE"] = soup.find(
+                "p", class_="font30 medium montserrat nuit-hiver mb-0"
+            ).get_text(strip=True)
+            arg_dict["REFERENCE"] = soup.find(
+                "p", class_="montserrat font12 medium cristallin mb-1 text-uppercase"
+            ).get_text(strip=True)
+        except AttributeError as exc:
+            LOGGER.warning(
+                "Failed to fetch mandatory attributes for: %s, error: %s", url, exc
+            )
+            return None
+
+        dpe_div = next(
+            (
+                div
+                for div in soup.find_all("div", class_="col-lg-6")
+                if "DPE" in div.get_text(strip=True)
+            ),
+            None,
+        )
+        ges_div = next(
+            (
+                div
+                for div in soup.find_all("div", class_="col-lg-6")
+                if "GES" in div.get_text(strip=True)
+            ),
+            None,
+        )
+        loc = soup.find("p", class_="royal mb-1")
+        arg_dict["ENERGY_PERFORMANCE"] = (
+            dpe_div.find("div", class_="value py-2").get_text(strip=True)
+            if dpe_div is not None
+            else None
+        )
+        arg_dict["GREENHOUSE_EMISSION"] = (
+            ges_div.find("div", class_="value py-2").get_text(strip=True)
+            if ges_div is not None
+            else None
+        )
+        arg_dict["LOCATION"] = loc.get_text(strip=True) if loc is not None else None
+
+        feature_list = soup.find_all("div", class_="col-6 col-lg-4 mb-3")
+        if feature_list:
+            try:
+                for feature in feature_list:
+                    tup = self.clean_feature(feature)
+                    if not tup:
+                        LOGGER.warning("Feature not cleaned: %s", feature)
+                        continue
+                    if tup[0] in self.conversion_args:
+                        arg_dict[self.conversion_args[tup[0]]] = tup[1]
+                    else:
+                        LOGGER.warning(
+                            "Feature '%s' not found in conversion dict for url %s.",
+                            tup[0],
+                            url,
+                        )
+            except AttributeError:
+                LOGGER.warning("No feature found for %s", url)
+
+        item = Item(
+            SPIDER=self.name,
+            AGENCY="Cimalpes",
+            DATE=date.today().isoformat(),
+            URL=url,
+            **arg_dict
+        )
+
+        return item
