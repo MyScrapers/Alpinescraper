@@ -76,6 +76,16 @@ class AcmImmobilierSpider(Spider):
             "Piscine": "POOL",
         }
 
+    def clean_price(self, text: str) -> str:
+        """Clean the prices because the references comes with it."""
+        match = re.search(r"Prix de vente : (\d[\d\s]*€)", text)
+        if match:
+            price = match.group(1)
+            return price
+        else:
+            LOGGER.warning("Price was not correctly cleaned for AcmImmo.")
+            raise AttributeError
+
     def parse(self, url: str) -> Optional[Item]:
         """Parse an offer."""
         try:
@@ -93,7 +103,10 @@ class AcmImmobilierSpider(Spider):
             arg_dict["DESCRIPTION"] = soup.find("div", id="description").get_text(
                 strip=True
             )
-            arg_dict["PRICE"] = soup.find("span", class_="prix").get_text(strip=True)
+            price_text = soup.find("span", class_="prix").get_text(
+                separator=" ", strip=True
+            )
+            arg_dict["PRICE"] = self.clean_price(price_text)
             arg_dict["REFERENCE"] = soup.find("span", class_="reference").get_text(
                 strip=True
             )
