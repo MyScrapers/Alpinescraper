@@ -23,6 +23,7 @@ class Item:
     COOWNERSHIP: Optional[str] = field(default=None)
     BALCONY_COUNT: Optional[int] = field(default=None)
     BATHROOMS: Optional[float] = field(default=None)
+    WC: Optional[float] = field(default=None)
     BEDROOMS: Optional[float] = field(default=None)
     CURRENCY: Optional[str] = field(default=None)
     DESCRIPTION: Optional[str] = field(default=None)
