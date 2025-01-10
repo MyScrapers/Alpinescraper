@@ -13,6 +13,7 @@ SCRAPERS: Dict[str, Type[scraper.ScrapingOrchestrator]] = {
     "acmimmobilier": scraper.AcmImmobilierOrchestrator,
     "agenceolivier": scraper.AgenceOlivierOrchestrator,
     "morzineimmo": scraper.MorzineImmorchestrator,
+    "cimalpes": scraper.CimalpesOrchestrator,
 }
 
 

@@ -88,14 +88,20 @@ class AcmImmobilierSpider(Spider):
 
         arg_dict = {}
         # Extract Item Fields
-        arg_dict["TITLE"] = soup.find("title").get_text(strip=True)
-        arg_dict["DESCRIPTION"] = soup.find("div", id="description").get_text(
-            strip=True
-        )
-        arg_dict["PRICE"] = soup.find("span", class_="prix").get_text(strip=True)
-        arg_dict["REFERENCE"] = soup.find("span", class_="reference").get_text(
-            strip=True
-        )
+        try:
+            arg_dict["TITLE"] = soup.find("title").get_text(strip=True)
+            arg_dict["DESCRIPTION"] = soup.find("div", id="description").get_text(
+                strip=True
+            )
+            arg_dict["PRICE"] = soup.find("span", class_="prix").get_text(strip=True)
+            arg_dict["REFERENCE"] = soup.find("span", class_="reference").get_text(
+                strip=True
+            )
+        except AttributeError as exc:
+            LOGGER.warning(
+                "Failed to fetch mandatory attributes for: %s, error: %s", url, exc
+            )
+            return None
 
         feature_list = soup.find("div", class_="critere-wrapper").find_all("div")
         if feature_list:
