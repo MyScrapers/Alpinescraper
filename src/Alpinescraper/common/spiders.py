@@ -82,9 +82,9 @@ class AcmImmobilierSpider(Spider):
         if match:
             price = match.group(1)
             return price
-        else:
-            LOGGER.warning("Price was not correctly cleaned for AcmImmo.")
-            raise AttributeError
+
+        LOGGER.warning("Price was not correctly cleaned for AcmImmo.")
+        raise AttributeError
 
     def parse(self, url: str) -> Optional[Item]:
         """Parse an offer."""
@@ -470,6 +470,23 @@ class CimalpeSpider(Spider):
             "Bien en copropriété": "COOWNERSHIP",
         }
 
+    def fetch_element(
+        self,
+        soup: BeautifulSoup,
+        selector: tuple[str, dict[str, str]],
+        element_name: str,
+        arg_dict: Dict[str, Optional[str]],
+        url: str,
+    ) -> None:
+        """Try-except for mandaotry elements."""
+        try:
+            arg_dict[element_name] = soup.find(*selector).get_text(strip=True)
+        except AttributeError as exc:
+            LOGGER.warning(
+                "Failed to fetch %s for: %s , error: %s", element_name, url, exc
+            )
+            raise
+
     def parse(self, url: str) -> Optional[Item]:
         """Parse an offer."""
         try:
@@ -481,26 +498,44 @@ class CimalpeSpider(Spider):
 
         soup = BeautifulSoup(response.content, "html.parser")
 
-        arg_dict = {}
+        arg_dict: Dict[str, Optional[str]] = {}
         # Extract Item Fields
         try:
-            arg_dict["TITLE"] = soup.find(
-                "h1",
-                class_="montserrat font26 font-xs-20 semi-bold nuit-hiver text-uppercase mb-0 mt-2",
-            ).get_text(strip=True)
-            arg_dict["DESCRIPTION"] = soup.find("div", id="manifest").get_text(
-                strip=True
+            self.fetch_element(
+                soup,
+                (
+                    "h1",
+                    {
+                        "class": "montserrat font26 font-xs-20 semi-bold nuit-hiver text-uppercase mb-0 mt-2"
+                    },
+                ),
+                "TITLE",
+                arg_dict,
+                url,
             )
-            arg_dict["PRICE"] = soup.find(
-                "p", class_="font30 medium montserrat nuit-hiver mb-0"
-            ).get_text(strip=True)
-            arg_dict["REFERENCE"] = soup.find(
-                "p", class_="montserrat font12 medium cristallin mb-1 text-uppercase"
-            ).get_text(strip=True)
-        except AttributeError as exc:
-            LOGGER.warning(
-                "Failed to fetch mandatory attributes for: %s, error: %s", url, exc
+            self.fetch_element(
+                soup, ("div", {"id": "manifest"}), "DESCRIPTION", arg_dict, url
             )
+            self.fetch_element(
+                soup,
+                ("p", {"class": "font30 medium montserrat nuit-hiver mb-0"}),
+                "PRICE",
+                arg_dict,
+                url,
+            )
+            self.fetch_element(
+                soup,
+                (
+                    "p",
+                    {
+                        "class": "montserrat font12 medium cristallin mb-1 text-uppercase"
+                    },
+                ),
+                "REFERENCE",
+                arg_dict,
+                url,
+            )
+        except AttributeError:
             return None
 
         dpe_div = next(
@@ -556,7 +591,7 @@ class CimalpeSpider(Spider):
             AGENCY="Cimalpes",
             DATE=date.today().isoformat(),
             URL=url,
-            **arg_dict
+            **arg_dict  # type: ignore[arg-type]
         )
 
         return item
