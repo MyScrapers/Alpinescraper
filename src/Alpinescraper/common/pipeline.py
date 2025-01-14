@@ -1,3 +1,4 @@
+# mypy: disable-error-code="import-untyped"
 """Define the process for the data scraped."""
 
 import json
@@ -8,6 +9,8 @@ from dataclasses import asdict, fields, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import pandas as pd
+from bson import BSON
 from pymongo import MongoClient
 
 from Alpinescraper.common.items import Item
@@ -171,6 +174,21 @@ class ItemPipeline:
         with open(json_filename, "w", encoding="utf-8") as file:
             json.dump(combined_data, file, ensure_ascii=False, indent=4)
 
+    def create_client(self) -> MongoClient[Dict[str, Any]]:
+        """Create a client connected to the databse."""
+        pwd = os.environ["MONGODB_PWD"]
+        user = os.environ["MONGODB_USER"]
+        mongo_database = os.environ["MONGODB_DATABASE"]
+        LOGGER.info("Create Client for the database: %s", mongo_database)
+
+        connection_string = f"mongodb+srv://{user}:{pwd}@cluster0.g0glf.mongodb.net/test?retryWrites=true&w=majority&tls=true&tlsAllowInvalidCertificates=true"
+        try:
+            client: MongoClient[Dict[str, Any]] = MongoClient(connection_string)
+        except Exception as exception:  # pylint: disable=broad-exception-caught
+            LOGGER.error("Couldn't connect to MongoDB: %s", exception)
+
+        return client
+
     def write_mongodb(self, collection_name: str, append: bool = False) -> None:
         """Writes the data scraped in the collection.
 
@@ -178,20 +196,16 @@ class ItemPipeline:
             collection_name (str): The name of the collection.
             append (bool): If True, append data to the collection. If False, overwrite the collection. Default is False.
         """
-        pwd = os.environ["MONGODB_PWD"]
-        user = os.environ["MONGODB_USER"]
+        client = self.create_client()
         mongo_database = os.environ["MONGODB_DATABASE"]
-        LOGGER.info("Writing data in : %s", mongo_database)
-
-        connection_string = f"mongodb+srv://{user}:{pwd}@cluster0.g0glf.mongodb.net/{mongo_database}?retryWrites=true&w=majority"
-        try:
-            client: MongoClient[Dict[str, Any]] = MongoClient(connection_string)
-        except Exception as exception:  # pylint: disable=broad-exception-caught
-            LOGGER.error("Couldn't connect to MongoDB: %s", exception)
-            return
-
         database_connection = client[mongo_database]
         tmp_collection = database_connection[collection_name]
+
+        while self.size_mongodb(client=client) + self.calculate_documents_size() >= 512:
+            LOGGER.warning(
+                "Writing data exceed Databse size allowed -> Cleaning old data."
+            )
+            self.clean_mongodb(client=client)
 
         if not append:
             # Clean the collection if append is False
@@ -205,3 +219,66 @@ class ItemPipeline:
             )
         except Exception as exception:  # pylint: disable=broad-exception-caught
             LOGGER.error("Error writing data to MongoDB: %s", exception)
+
+    def size_mongodb(self, client: MongoClient[Dict[str, Any]]) -> float:
+        """Return size of the mongoDB in MB."""
+        mongo_database = os.environ["MONGODB_DATABASE"]
+
+        database = client[mongo_database]
+        stats = database.command("dbStats")
+        data_size_bytes = stats.get("dataSize", 0)
+        index_size_bytes = stats.get("indexSize", 0)
+        total_size_bytes: float = data_size_bytes + index_size_bytes
+
+        return total_size_bytes / (1024 * 1024)  # Convert bytes to MB
+
+    def calculate_documents_size(self) -> float:
+        """Calculate the size of documents in MB."""
+        total_size = 0.0
+        for item in self.clean_item:
+            total_size += len(BSON.encode(asdict(item)))
+        return total_size / (1024 * 1024)
+
+    def clean_mongodb(self, client: MongoClient[Dict[str, Any]]) -> None:
+        """Clean databse when full (max 512MB)."""
+        database_name = os.environ["MONGODB_DATABASE"]
+        database = client[database_name]
+
+        df = self.load_data(client=client)
+        min_date = df["DATE"].min()
+
+        for collection_name in database.list_collection_names():
+            collection = database[collection_name]
+            result = collection.delete_many({"DATE": min_date})
+            LOGGER.info(
+                "Deleted %d documents from collection '%s' with DATE == %s",
+                result.deleted_count,
+                collection_name,
+                min_date,
+            )
+
+    def load_collection(
+        self, collection: str, client: MongoClient[Dict[str, Any]]
+    ) -> pd.DataFrame:
+        """Load a collection from MongoDB."""
+        LOGGER.info("Reading data from the collection: %s", collection)
+        mongo_database = os.environ["MONGODB_DATABASE"]
+        database_conection = client[mongo_database]
+        tmp_collection = database_conection[collection]
+        data = tmp_collection.find()
+        df = pd.DataFrame(data)
+
+        return df
+
+    def load_data(self, client: MongoClient[Dict[str, Any]]) -> pd.DataFrame:
+        """Load all the data from the database."""
+        database_name = os.environ["MONGODB_DATABASE"]
+        LOGGER.info("Reading data from the database: %s", database_name)
+        df = pd.DataFrame()
+        for coll_name in client[database_name].list_collection_names():
+            if df.empty:
+                df = self.load_collection(coll_name, client)
+            else:
+                df = pd.concat([df, self.load_collection(coll_name, client)])
+
+        return df
